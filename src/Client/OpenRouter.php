@@ -21,6 +21,8 @@ use MichaelFrank\OpenRouter\Http\SseStreamParser;
 use MichaelFrank\OpenRouter\Metadata\ResponseMetadata;
 use MichaelFrank\OpenRouter\Requests\AudioSpeechRequest;
 use MichaelFrank\OpenRouter\Requests\AudioTranscriptionRequest;
+use MichaelFrank\OpenRouter\Requests\Batches\BatchCreateRequest;
+use MichaelFrank\OpenRouter\Requests\Batches\BatchListQuery;
 use MichaelFrank\OpenRouter\Requests\CompletionRequest;
 use MichaelFrank\OpenRouter\Requests\EmbeddingRequest;
 use MichaelFrank\OpenRouter\Requests\ImageGenerationRequest;
@@ -28,6 +30,9 @@ use MichaelFrank\OpenRouter\Requests\ModelListQuery;
 use MichaelFrank\OpenRouter\Requests\RerankRequest;
 use MichaelFrank\OpenRouter\Responses\AudioSpeechResponse;
 use MichaelFrank\OpenRouter\Responses\AudioTranscriptionResponse;
+use MichaelFrank\OpenRouter\Responses\Batches\BatchDeletionResponse;
+use MichaelFrank\OpenRouter\Responses\Batches\BatchListResponse;
+use MichaelFrank\OpenRouter\Responses\Batches\BatchResponse;
 use MichaelFrank\OpenRouter\Responses\ChatCompletionResponse;
 use MichaelFrank\OpenRouter\Responses\CreditsResponse;
 use MichaelFrank\OpenRouter\Responses\EmbeddingResponse;
@@ -320,5 +325,69 @@ final class OpenRouter implements OpenRouterInterface
         $payload = $validator->decode($response);
 
         return ImageModelEndpointsResponse::fromArray($payload, ResponseMetadata::fromResponse($response));
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function submitBatch(BatchCreateRequest $request): BatchResponse
+    {
+        $psrRequest = $this->requestBuilder->buildSubmitBatchRequest($request);
+        $response = $this->sendRequest($psrRequest);
+
+        $validator = new JsonResponseValidator();
+        $payload = $validator->decode($response);
+
+        return BatchResponse::fromArray($payload, ResponseMetadata::fromResponse($response));
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function batches(?BatchListQuery $query = null): BatchListResponse
+    {
+        $psrRequest = $this->requestBuilder->buildListBatchesRequest($query);
+        $response = $this->sendRequest($psrRequest);
+
+        $validator = new JsonResponseValidator();
+        $payload = $validator->decode($response);
+
+        return BatchListResponse::fromArray($payload, ResponseMetadata::fromResponse($response));
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function batch(string $id): BatchResponse
+    {
+        if (trim($id) === '') {
+            throw new ValidationException('Batch ID cannot be empty.');
+        }
+
+        $psrRequest = $this->requestBuilder->buildGetBatchRequest($id);
+        $response = $this->sendRequest($psrRequest);
+
+        $validator = new JsonResponseValidator();
+        $payload = $validator->decode($response);
+
+        return BatchResponse::fromArray($payload, ResponseMetadata::fromResponse($response));
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function deleteBatch(string $id): BatchDeletionResponse
+    {
+        if (trim($id) === '') {
+            throw new ValidationException('Batch ID cannot be empty.');
+        }
+
+        $psrRequest = $this->requestBuilder->buildDeleteBatchRequest($id);
+        $response = $this->sendRequest($psrRequest);
+
+        $validator = new JsonResponseValidator();
+        $payload = $validator->decode($response);
+
+        return BatchDeletionResponse::fromArray($payload, ResponseMetadata::fromResponse($response));
     }
 }

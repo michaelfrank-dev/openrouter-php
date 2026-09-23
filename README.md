@@ -18,6 +18,7 @@ A framework-agnostic, strictly typed PHP SDK for the OpenRouter API. Fully compl
 > - **Audio (Speech & Transcriptions):** Text-to-speech synthesis with direct file export (`speech`) and audio file transcription (`transcriptions`).
 > - **Image Generation:** Standalone text-to-image generation (`images`) and streaming generation events (`streamImages`).
 > - **Account & Generation Analytics:** Checking credit balance (`credits`) and looking up generation stats by ID (`generation`).
+> - **Batch Processing:** Submitting asynchronous batch inference requests (`submitBatch`), retrieving progress and inline results (`batch`), listing workspace batches with filters (`batches`), and deleting terminal batches (`deleteBatch`).
 > - **Response Metadata & Rate Limits:** Automatic extraction of request IDs and rate limit headers (`X-RateLimit-*`).
 
 ---
@@ -672,6 +673,103 @@ foreach ($endpointsResponse->endpoints as $endpoint) {
     foreach ($endpoint->pricing as $price) {
         echo " - Pricing: {$price->billable} cost: \${$price->costUsd} per {$price->unit}\n";
     }
+}
+```
+
+### Batch Processing (Async Inference)
+
+The Batch API lets you submit many inference requests together and retrieve the results asynchronously with a 24-hour completion window, typically at a 50% pricing discount.
+
+#### 1. Submit a Batch
+
+```php
+use MichaelFrank\OpenRouter\Requests\Batches\BatchCreateRequest;
+use MichaelFrank\OpenRouter\Requests\Batches\BatchEndpoint;
+use MichaelFrank\OpenRouter\Requests\Batches\BatchItem;
+use MichaelFrank\OpenRouter\Requests\Batches\BatchProviderRouting;
+
+$batchRequest = new BatchCreateRequest(
+    endpoint: BatchEndpoint::fromString(BatchEndpoint::CHAT_COMPLETIONS),
+    model: 'openai/gpt-4o',
+    requests: [
+        new BatchItem(
+            customId: 'req-0001',
+            body: [
+                'messages' => [
+                    ['role' => 'user', 'content' => 'Summarize OpenRouter in one sentence.']
+                ]
+            ]
+        ),
+        new BatchItem(
+            customId: 'req-0002',
+            body: [
+                'messages' => [
+                    ['role' => 'user', 'content' => 'What is the capital of Brazil?']
+                ]
+            ]
+        )
+    ],
+    provider: new BatchProviderRouting(['google-vertex']) // Optional: pin provider
+);
+
+$batch = $client->submitBatch($batchRequest);
+echo "Batch ID: " . $batch->id . "\n";
+echo "Status: " . $batch->status->value . "\n"; // validating
+```
+
+#### 2. Poll for Batch Status & Inline Results
+
+```php
+$batch = $client->batch('batch_123');
+
+echo "Current Status: " . $batch->status->value . "\n";
+if ($batch->requestCounts !== null) {
+    echo "Total: " . $batch->requestCounts->total . ", Completed: " . $batch->requestCounts->completed . "\n";
+}
+
+if ($batch->status === \MichaelFrank\OpenRouter\Enums\BatchStatus::Completed && $batch->results !== null) {
+    foreach ($batch->results as $resultItem) {
+        echo "Custom ID: " . $resultItem->customId . "\n";
+        if ($resultItem->response !== null) {
+            echo "Status Code: " . $resultItem->response->statusCode . "\n";
+            $message = $resultItem->response->body['choices'][0]['message']['content'] ?? '';
+            echo "Output: " . $message . "\n";
+        } elseif ($resultItem->error !== null) {
+            echo "Error: " . ($resultItem->error['message'] ?? 'Failed') . "\n";
+        }
+    }
+}
+```
+
+#### 3. List Batches in Workspace
+
+```php
+use MichaelFrank\OpenRouter\Enums\BatchStatus;
+use MichaelFrank\OpenRouter\Requests\Batches\BatchListQuery;
+
+$query = new BatchListQuery(
+    limit: 20,
+    status: [BatchStatus::Completed, BatchStatus::Failed]
+);
+
+$listResponse = $client->batches($query);
+
+foreach ($listResponse->data as $batch) {
+    echo "Batch ID: {$batch->id} (Status: {$batch->status->value})\n";
+}
+
+if ($listResponse->hasMore && $listResponse->lastId !== null) {
+    $nextPage = $client->batches(new BatchListQuery(after: $listResponse->lastId));
+}
+```
+
+#### 4. Delete a Completed/Terminal Batch
+
+```php
+$deletion = $client->deleteBatch('batch_123');
+echo "Batch " . $deletion->id . " OpenRouter status: " . $deletion->deletion->openrouter . "\n";
+if ($deletion->deletion->upstream !== null) {
+    echo "Upstream (" . $deletion->deletion->upstream->provider . "): " . $deletion->deletion->upstream->status . "\n";
 }
 ```
 

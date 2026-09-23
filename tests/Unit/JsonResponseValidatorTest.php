@@ -50,4 +50,19 @@ final class JsonResponseValidatorTest extends TestCase
         $this->expectExceptionMessage('Insufficient credits');
         $validator->decode($response);
     }
+
+    public function testDecodeNullErrorKeyDoesNotThrowException(): void
+    {
+        $body = json_encode([
+            'id' => 'batch_123',
+            'error' => null,
+        ]);
+        $this->assertIsString($body);
+
+        $response = new Response(200, [], $body);
+        $validator = new JsonResponseValidator();
+        $data = $validator->decode($response);
+
+        $this->assertSame(['id' => 'batch_123', 'error' => null], $data);
+    }
 }

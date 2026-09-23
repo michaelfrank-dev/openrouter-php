@@ -10,6 +10,8 @@ use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Http\Message\UriFactoryInterface;
 use MichaelFrank\OpenRouter\Requests\AudioSpeechRequest;
 use MichaelFrank\OpenRouter\Requests\AudioTranscriptionRequest;
+use MichaelFrank\OpenRouter\Requests\Batches\BatchCreateRequest;
+use MichaelFrank\OpenRouter\Requests\Batches\BatchListQuery;
 use MichaelFrank\OpenRouter\Requests\CompletionRequest;
 use MichaelFrank\OpenRouter\Requests\EmbeddingRequest;
 use MichaelFrank\OpenRouter\Requests\ImageGenerationRequest;
@@ -213,5 +215,69 @@ final readonly class RequestBuilder
     {
         $path = 'images/models/' . urlencode($author) . '/' . urlencode($slug) . '/endpoints';
         return $this->createRequest('GET', $path);
+    }
+
+    /**
+     * Builds batch submission request.
+     *
+     * @param BatchCreateRequest $request
+     * @return RequestInterface
+     */
+    public function buildSubmitBatchRequest(BatchCreateRequest $request): RequestInterface
+    {
+        return $this->createRequest('POST', 'batches', $request->toArray());
+    }
+
+    /**
+     * Builds batch list query request.
+     *
+     * @param BatchListQuery|null $query
+     * @return RequestInterface
+     */
+    public function buildListBatchesRequest(?BatchListQuery $query = null): RequestInterface
+    {
+        $path = 'batches';
+        if ($query !== null) {
+            $params = $query->toArray();
+            $parts = [];
+            foreach ($params as $key => $val) {
+                if (is_array($val)) {
+                    foreach ($val as $item) {
+                        if (is_scalar($item)) {
+                            $parts[] = urlencode($key) . '=' . urlencode((string) $item);
+                        }
+                    }
+                } elseif (is_scalar($val)) {
+                    $parts[] = urlencode($key) . '=' . urlencode((string) $val);
+                }
+            }
+            if (!empty($parts)) {
+                $path .= '?' . implode('&', $parts);
+            }
+        }
+
+        return $this->createRequest('GET', $path);
+    }
+
+    /**
+     * Builds request to retrieve an individual batch by ID.
+     *
+     * @param string $id
+     * @return RequestInterface
+     */
+    public function buildGetBatchRequest(string $id): RequestInterface
+    {
+        return $this->createRequest('GET', 'batches/' . urlencode($id));
+    }
+
+    /**
+     * Builds request to delete a batch by ID.
+     *
+     * @param string $id
+     * @return RequestInterface
+     */
+    public function buildDeleteBatchRequest(string $id): RequestInterface
+    {
+        return $this->createRequest('DELETE', 'batches/' . urlencode($id));
     }
 }

@@ -7,8 +7,14 @@ namespace MichaelFrank\OpenRouter\Tests\Integration;
 use GuzzleHttp\Psr7\Response;
 use Http\Discovery\Psr17FactoryDiscovery;
 use MichaelFrank\OpenRouter\Client\OpenRouter;
+use MichaelFrank\OpenRouter\Enums\BatchStatus;
 use MichaelFrank\OpenRouter\Requests\AudioSpeechRequest;
 use MichaelFrank\OpenRouter\Requests\AudioTranscriptionRequest;
+use MichaelFrank\OpenRouter\Requests\Batches\BatchCreateRequest;
+use MichaelFrank\OpenRouter\Requests\Batches\BatchEndpoint;
+use MichaelFrank\OpenRouter\Requests\Batches\BatchItem;
+use MichaelFrank\OpenRouter\Requests\Batches\BatchListQuery;
+use MichaelFrank\OpenRouter\Requests\Batches\BatchProviderRouting;
 use MichaelFrank\OpenRouter\Requests\CompletionOptions;
 use MichaelFrank\OpenRouter\Requests\CompletionRequest;
 use MichaelFrank\OpenRouter\Requests\EmbeddingRequest;
@@ -505,5 +511,252 @@ final class SdkIntegrationTest extends TestCase
 
         $client = $this->getClient();
         $client->imageModelEndpoints('author', '');
+    }
+
+    public function testSubmitBatchIntegration(): void
+    {
+        $payload = [
+            'id' => 'batch_submit_123',
+            'object' => 'batch',
+            'endpoint' => '/v1/chat/completions',
+            'model' => 'openai/gpt-4o',
+            'completion_window' => '24h',
+            'status' => 'validating',
+            'created_at' => 1782097200,
+            'finalized_at' => null,
+            'request_counts' => [
+                'total' => 1,
+                'completed' => 0,
+                'failed' => 0,
+            ],
+            'usage' => null,
+            'results' => null,
+            'error' => null,
+        ];
+
+        $headers = [
+            'x-ratelimit-limit' => '500',
+            'x-ratelimit-remaining' => '499',
+        ];
+
+        $response = new Response(202, $headers, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        /** @var \PHPUnit\Framework\MockObject\MockObject&ClientInterface $mock */
+        $mock = $this->clientMock;
+        $mock->expects($this->once())
+            ->method('sendRequest')
+            ->with($this->callback(function (\Psr\Http\Message\RequestInterface $request): bool {
+                $this->assertSame('POST', $request->getMethod());
+                $this->assertSame('https://openrouter.ai/api/v1/batches', (string) $request->getUri());
+                $body = json_decode((string) $request->getBody(), true);
+                $this->assertIsArray($body);
+                $this->assertSame('/v1/chat/completions', $body['endpoint']);
+                $this->assertSame('openai/gpt-4o', $body['model']);
+                $this->assertSame(['only' => ['google-vertex']], $body['provider']);
+                $reqs = $body['requests'];
+                $this->assertIsArray($reqs);
+                $this->assertCount(1, $reqs);
+                return true;
+            }))
+            ->willReturn($response);
+
+        $client = $this->getClient();
+        $batchRequest = new BatchCreateRequest(
+            endpoint: BatchEndpoint::fromString(BatchEndpoint::CHAT_COMPLETIONS),
+            model: 'openai/gpt-4o',
+            requests: [
+                new BatchItem('req-1', ['messages' => [['role' => 'user', 'content' => 'Hello']]])
+            ],
+            provider: new BatchProviderRouting(['google-vertex'])
+        );
+
+        $result = $client->submitBatch($batchRequest);
+
+        $this->assertSame('batch_submit_123', $result->id);
+        $this->assertSame(BatchStatus::Validating, $result->status);
+        $this->assertSame(500, $result->metadata->rateLimit->limit);
+    }
+
+    public function testListBatchesIntegration(): void
+    {
+        $payload = [
+            'object' => 'list',
+            'data' => [
+                [
+                    'id' => 'batch_9f2c1e',
+                    'object' => 'batch',
+                    'endpoint' => '/v1/chat/completions',
+                    'model' => 'openai/gpt-4o',
+                    'completion_window' => '24h',
+                    'status' => 'completed',
+                    'created_at' => 1787836000,
+                    'finalized_at' => 1787837000,
+                    'request_counts' => ['total' => 100, 'completed' => 100, 'failed' => 0],
+                    'usage' => ['prompt_tokens' => 51200, 'completion_tokens' => 20480, 'total_tokens' => 71680],
+                    'results' => null,
+                    'error' => null,
+                ],
+            ],
+            'first_id' => 'batch_9f2c1e',
+            'last_id' => 'batch_9f2c1e',
+            'has_more' => false,
+        ];
+
+        $response = new Response(200, [], json_encode($payload, JSON_THROW_ON_ERROR));
+
+        /** @var \PHPUnit\Framework\MockObject\MockObject&ClientInterface $mock */
+        $mock = $this->clientMock;
+        $mock->expects($this->once())
+            ->method('sendRequest')
+            ->with($this->callback(function (\Psr\Http\Message\RequestInterface $request): bool {
+                $this->assertSame('GET', $request->getMethod());
+                $this->assertStringContainsString('limit=2', (string) $request->getUri());
+                $this->assertStringContainsString('status=completed', (string) $request->getUri());
+                $this->assertStringContainsString('status=failed', (string) $request->getUri());
+                return true;
+            }))
+            ->willReturn($response);
+
+        $client = $this->getClient();
+        $query = new BatchListQuery(limit: 2, status: [BatchStatus::Completed, BatchStatus::Failed]);
+        $result = $client->batches($query);
+
+        $this->assertSame('list', $result->object);
+        $this->assertCount(1, $result->data);
+        $this->assertSame('batch_9f2c1e', $result->data[0]->id);
+        $this->assertSame(BatchStatus::Completed, $result->data[0]->status);
+    }
+
+    public function testGetBatchIntegration(): void
+    {
+        $payload = [
+            'id' => 'batch_xyz',
+            'object' => 'batch',
+            'endpoint' => '/v1/chat/completions',
+            'model' => 'openai/gpt-4o',
+            'completion_window' => '24h',
+            'status' => 'completed',
+            'created_at' => 1782097200,
+            'finalized_at' => 1782100800,
+            'request_counts' => ['total' => 1, 'completed' => 1, 'failed' => 0],
+            'usage' => [
+                'prompt_tokens' => 20,
+                'completion_tokens' => 40,
+                'total_tokens' => 60,
+                'cost' => 0.000225,
+                'is_byok' => false,
+            ],
+            'results' => [
+                [
+                    'id' => 'batch_req_123',
+                    'custom_id' => 'req-0001',
+                    'response' => [
+                        'status_code' => 200,
+                        'request_id' => 'request_123',
+                        'body' => [
+                            'id' => 'gen-batch-123',
+                            'object' => 'chat.completion',
+                            'choices' => [
+                                [
+                                    'index' => 0,
+                                    'message' => [
+                                        'role' => 'assistant',
+                                        'content' => 'Hello there!',
+                                    ],
+                                    'finish_reason' => 'stop',
+                                ],
+                            ],
+                        ],
+                    ],
+                    'error' => null,
+                ],
+            ],
+            'error' => null,
+        ];
+
+        $response = new Response(200, [], json_encode($payload, JSON_THROW_ON_ERROR));
+
+        /** @var \PHPUnit\Framework\MockObject\MockObject&ClientInterface $mock */
+        $mock = $this->clientMock;
+        $mock->expects($this->once())
+            ->method('sendRequest')
+            ->with($this->callback(function (\Psr\Http\Message\RequestInterface $request): bool {
+                $this->assertSame('GET', $request->getMethod());
+                $this->assertSame('https://openrouter.ai/api/v1/batches/batch_xyz', (string) $request->getUri());
+                return true;
+            }))
+            ->willReturn($response);
+
+        $client = $this->getClient();
+        $batch = $client->batch('batch_xyz');
+
+        $this->assertSame('batch_xyz', $batch->id);
+        $this->assertSame(BatchStatus::Completed, $batch->status);
+        $this->assertNotNull($batch->results);
+        $responseObj = $batch->results[0]->response;
+        $this->assertNotNull($responseObj);
+        $choices = $responseObj->body['choices'] ?? null;
+        $this->assertIsArray($choices);
+        $firstChoice = $choices[0] ?? null;
+        $this->assertIsArray($firstChoice);
+        $msg = $firstChoice['message'] ?? null;
+        $this->assertIsArray($msg);
+        $this->assertSame('Hello there!', $msg['content']);
+    }
+
+    public function testGetBatchValidationThrowsOnEmptyId(): void
+    {
+        $this->expectException(\MichaelFrank\OpenRouter\Exceptions\ValidationException::class);
+        $this->expectExceptionMessage('Batch ID cannot be empty.');
+
+        $client = $this->getClient();
+        $client->batch('   ');
+    }
+
+    public function testDeleteBatchIntegration(): void
+    {
+        $payload = [
+            'id' => 'batch_123',
+            'object' => 'batch',
+            'deletion' => [
+                'openrouter' => 'deleted',
+                'upstream' => [
+                    'provider' => 'Anthropic',
+                    'status' => 'deleted',
+                ],
+            ],
+        ];
+
+        $response = new Response(200, [], json_encode($payload, JSON_THROW_ON_ERROR));
+
+        /** @var \PHPUnit\Framework\MockObject\MockObject&ClientInterface $mock */
+        $mock = $this->clientMock;
+        $mock->expects($this->once())
+            ->method('sendRequest')
+            ->with($this->callback(function (\Psr\Http\Message\RequestInterface $request): bool {
+                $this->assertSame('DELETE', $request->getMethod());
+                $this->assertSame('https://openrouter.ai/api/v1/batches/batch_123', (string) $request->getUri());
+                return true;
+            }))
+            ->willReturn($response);
+
+        $client = $this->getClient();
+        $res = $client->deleteBatch('batch_123');
+
+        $this->assertSame('batch_123', $res->id);
+        $this->assertSame('deleted', $res->deletion->openrouter);
+        $upstream = $res->deletion->upstream;
+        $this->assertNotNull($upstream);
+        $this->assertSame('Anthropic', $upstream->provider);
+        $this->assertSame('deleted', $upstream->status);
+    }
+
+    public function testDeleteBatchValidationThrowsOnEmptyId(): void
+    {
+        $this->expectException(\MichaelFrank\OpenRouter\Exceptions\ValidationException::class);
+        $this->expectExceptionMessage('Batch ID cannot be empty.');
+
+        $client = $this->getClient();
+        $client->deleteBatch('');
     }
 }

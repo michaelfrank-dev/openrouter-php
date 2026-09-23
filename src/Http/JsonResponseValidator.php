@@ -49,7 +49,7 @@ final class JsonResponseValidator
             );
         }
 
-        if (array_key_exists('error', $data)) {
+        if (array_key_exists('error', $data) && $data['error'] !== null) {
             $metadata = ResponseMetadata::fromResponse($response);
             $errorObj = $data['error'];
             $message = 'API Error';

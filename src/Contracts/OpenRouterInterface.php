@@ -128,4 +128,40 @@ interface OpenRouterInterface
      * @throws \MichaelFrank\OpenRouter\Exceptions\OpenRouterException
      */
     public function imageModelEndpoints(string $author, string $slug): \MichaelFrank\OpenRouter\Responses\ImageModelEndpointsResponse;
+
+    /**
+     * Submits an asynchronous batch of inference requests.
+     *
+     * @param \MichaelFrank\OpenRouter\Requests\Batches\BatchCreateRequest $request
+     * @return \MichaelFrank\OpenRouter\Responses\Batches\BatchResponse
+     * @throws \MichaelFrank\OpenRouter\Exceptions\OpenRouterException
+     */
+    public function submitBatch(\MichaelFrank\OpenRouter\Requests\Batches\BatchCreateRequest $request): \MichaelFrank\OpenRouter\Responses\Batches\BatchResponse;
+
+    /**
+     * Lists batches in the authenticating key's workspace.
+     *
+     * @param \MichaelFrank\OpenRouter\Requests\Batches\BatchListQuery|null $query
+     * @return \MichaelFrank\OpenRouter\Responses\Batches\BatchListResponse
+     * @throws \MichaelFrank\OpenRouter\Exceptions\OpenRouterException
+     */
+    public function batches(?\MichaelFrank\OpenRouter\Requests\Batches\BatchListQuery $query = null): \MichaelFrank\OpenRouter\Responses\Batches\BatchListResponse;
+
+    /**
+     * Retrieves status and inline results for a specific batch.
+     *
+     * @param string $id
+     * @return \MichaelFrank\OpenRouter\Responses\Batches\BatchResponse
+     * @throws \MichaelFrank\OpenRouter\Exceptions\OpenRouterException
+     */
+    public function batch(string $id): \MichaelFrank\OpenRouter\Responses\Batches\BatchResponse;
+
+    /**
+     * Deletes a terminal batch and purges every request and result artifact.
+     *
+     * @param string $id
+     * @return \MichaelFrank\OpenRouter\Responses\Batches\BatchDeletionResponse
+     * @throws \MichaelFrank\OpenRouter\Exceptions\OpenRouterException
+     */
+    public function deleteBatch(string $id): \MichaelFrank\OpenRouter\Responses\Batches\BatchDeletionResponse;
 }
