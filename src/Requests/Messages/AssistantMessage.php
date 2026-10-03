@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace MichaelFrank\OpenRouter\Requests\Messages;
 
+use MichaelFrank\OpenRouter\Responses\Reasoning\ReasoningDetail;
+
 /**
  * Class AssistantMessage
  *
@@ -19,11 +21,15 @@ final readonly class AssistantMessage implements MessageInterface
      * @param string|null $content
      * @param array<AssistantMessageToolCall>|null $toolCalls
      * @param string|null $name
+     * @param string|null $reasoning Plaintext reasoning to preserve across multi-turn tool calling.
+     * @param array<ReasoningDetail|array<string, mixed>>|null $reasoningDetails Structured reasoning blocks to preserve.
      */
     public function __construct(
         public ?string $content = null,
         public ?array $toolCalls = null,
         public ?string $name = null,
+        public ?string $reasoning = null,
+        public ?array $reasoningDetails = null,
     ) {
     }
 
@@ -48,6 +54,19 @@ final readonly class AssistantMessage implements MessageInterface
 
         if ($this->name !== null) {
             $data['name'] = $this->name;
+        }
+
+        if ($this->reasoning !== null) {
+            $data['reasoning'] = $this->reasoning;
+        }
+
+        if ($this->reasoningDetails !== null && $this->reasoningDetails !== []) {
+            $data['reasoning_details'] = array_map(
+                static fn(ReasoningDetail|array $item): array => $item instanceof ReasoningDetail
+                    ? $item->toArray()
+                    : $item,
+                $this->reasoningDetails
+            );
         }
 
         return $data;

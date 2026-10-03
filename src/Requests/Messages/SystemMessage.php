@@ -18,10 +18,12 @@ final readonly class SystemMessage implements MessageInterface
      *
      * @param string $content
      * @param string|null $name
+     * @param array<string, mixed>|null $configurationUpdate Mid-conversation configuration update (e.g. reasoning effort changes).
      */
     public function __construct(
         public string $content,
         public ?string $name = null,
+        public ?array $configurationUpdate = null,
     ) {
     }
 
@@ -39,6 +41,10 @@ final readonly class SystemMessage implements MessageInterface
 
         if ($this->name !== null) {
             $data['name'] = $this->name;
+        }
+
+        if ($this->configurationUpdate !== null && $this->configurationUpdate !== []) {
+            $data['configuration_update'] = $this->configurationUpdate;
         }
 
         return $data;

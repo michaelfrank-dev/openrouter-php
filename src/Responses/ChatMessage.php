@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MichaelFrank\OpenRouter\Responses;
 
 use MichaelFrank\OpenRouter\Enums\MessageRole;
+use MichaelFrank\OpenRouter\Responses\Reasoning\ReasoningDetail;
 
 /**
  * Class ChatMessage
@@ -24,6 +25,7 @@ final readonly class ChatMessage
      * @param array<ToolCall> $toolCalls
      * @param string|null $name
      * @param string|null $toolCallId
+     * @param array<ReasoningDetail> $reasoningDetails
      */
     public function __construct(
         public MessageRole $role,
@@ -32,6 +34,7 @@ final readonly class ChatMessage
         public array $toolCalls,
         public ?string $name,
         public ?string $toolCallId,
+        public array $reasoningDetails = [],
     ) {
     }
 
@@ -52,6 +55,15 @@ final readonly class ChatMessage
             }
         }
 
+        $reasoningDetails = [];
+        if (isset($data['reasoning_details']) && is_array($data['reasoning_details'])) {
+            foreach ($data['reasoning_details'] as $rd) {
+                if (is_array($rd)) {
+                    $reasoningDetails[] = ReasoningDetail::fromArray($rd);
+                }
+            }
+        }
+
         $role = $data['role'] ?? null;
         $content = $data['content'] ?? null;
         $reasoning = $data['reasoning'] ?? null;
@@ -64,7 +76,8 @@ final readonly class ChatMessage
             reasoning: is_string($reasoning) ? $reasoning : null,
             toolCalls: $toolCalls,
             name: is_string($name) ? $name : null,
-            toolCallId: is_string($toolCallId) ? $toolCallId : null
+            toolCallId: is_string($toolCallId) ? $toolCallId : null,
+            reasoningDetails: $reasoningDetails
         );
     }
 

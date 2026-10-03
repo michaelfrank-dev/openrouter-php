@@ -68,4 +68,14 @@ final readonly class CompletionStreamChunk
             metadata: $metadata ?? new ResponseMetadata()
         );
     }
+
+    /**
+     * Helper to retrieve the first choice chunk generated, if any.
+     *
+     * @return CompletionChoiceChunk|null
+     */
+    public function getFirstChoice(): ?CompletionChoiceChunk
+    {
+        return $this->choices[0] ?? null;
+    }
 }

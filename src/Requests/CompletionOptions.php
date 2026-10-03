@@ -9,6 +9,10 @@ use MichaelFrank\OpenRouter\Requests\ProviderRouting\SearchContextSize;
 use MichaelFrank\OpenRouter\Requests\ProviderRouting\WebSearchEngine;
 use MichaelFrank\OpenRouter\Requests\ProviderRouting\WebSearchOptions;
 use MichaelFrank\OpenRouter\Requests\ProviderRouting\XSearchFilter;
+use MichaelFrank\OpenRouter\Requests\Reasoning\ReasoningConfig;
+use MichaelFrank\OpenRouter\Requests\Reasoning\ReasoningContext;
+use MichaelFrank\OpenRouter\Requests\Reasoning\ReasoningEffort;
+use MichaelFrank\OpenRouter\Requests\Reasoning\ReasoningMode;
 use MichaelFrank\OpenRouter\Requests\ResponseFormat\JsonSchemaResponseFormat;
 use MichaelFrank\OpenRouter\Requests\ResponseFormat\ResponseFormat;
 use MichaelFrank\OpenRouter\Requests\Tools\OpenRouterWebSearchTool;
@@ -51,13 +55,15 @@ final class CompletionOptions implements \JsonSerializable
      * @param bool $stream
      * @param ResponseFormat|null $responseFormat
      * @param Verbosity|null $verbosity
-     * @param bool $includeReasoning
+     * @param bool $includeReasoning Deprecated: use $reasoning instead.
      * @param bool|null $responseHealing
      * @param array<string, float>|null $logitBias
      * @param array<string, mixed>|null $prediction
      * @param bool|null $logprobs
      * @param int|null $topLogprobs
      * @param string|null $user
+     * @param ReasoningConfig|null $reasoning Unified reasoning tokens configuration.
+     * @param array<string, mixed> $extraParameters Arbitrary/beta parameters merged directly into payload.
      */
     public function __construct(
         public readonly ?float $temperature = null,
@@ -90,6 +96,8 @@ final class CompletionOptions implements \JsonSerializable
         public readonly ?bool $logprobs = null,
         public readonly ?int $topLogprobs = null,
         public readonly ?string $user = null,
+        public readonly ?ReasoningConfig $reasoning = null,
+        public readonly array $extraParameters = [],
     ) {
     }
 
@@ -226,6 +234,56 @@ final class CompletionOptions implements \JsonSerializable
             }
         }
 
+        $reasoning = null;
+        if (isset($data['reasoning'])) {
+            if ($data['reasoning'] instanceof ReasoningConfig) {
+                $reasoning = $data['reasoning'];
+            } elseif (is_array($data['reasoning'])) {
+                $reasoning = ReasoningConfig::fromArray($data['reasoning']);
+            }
+        }
+
+        $knownKeys = [
+            'temperature',
+            'top_p',
+            'top_k',
+            'min_p',
+            'top_a',
+            'seed',
+            'max_tokens',
+            'repetition_penalty',
+            'presence_penalty',
+            'frequency_penalty',
+            'stream',
+            'verbosity',
+            'route',
+            'user',
+            'logprobs',
+            'top_logprobs',
+            'response_healing',
+            'parallel_tool_calls',
+            'include_reasoning',
+            'stop',
+            'tools',
+            'tool_choice',
+            'logit_bias',
+            'prediction',
+            'transforms',
+            'plugins',
+            'web_search_options',
+            'x_search_filter',
+            'provider',
+            'response_format',
+            'reasoning',
+        ];
+
+        $extraParameters = [];
+        foreach ($data as $k => $v) {
+            if (!in_array($k, $knownKeys, true)) {
+                $extraParameters[$k] = $v;
+            }
+        }
+
         return new self(
             temperature: is_numeric($temperature) ? (float)$temperature : null,
             topP: is_numeric($topP) ? (float)$topP : null,
@@ -257,6 +315,8 @@ final class CompletionOptions implements \JsonSerializable
             logprobs: $logprobs !== null ? (bool)$logprobs : null,
             topLogprobs: is_numeric($topLogprobs) ? (int)$topLogprobs : null,
             user: is_string($user) ? $user : null,
+            reasoning: $reasoning,
+            extraParameters: $extraParameters,
         );
     }
 
@@ -299,6 +359,8 @@ final class CompletionOptions implements \JsonSerializable
             logprobs: $this->logprobs,
             topLogprobs: $this->topLogprobs,
             user: $this->user,
+            reasoning: $this->reasoning,
+            extraParameters: $this->extraParameters,
         );
     }
 
@@ -343,6 +405,8 @@ final class CompletionOptions implements \JsonSerializable
             logprobs: $this->logprobs,
             topLogprobs: $this->topLogprobs,
             user: $this->user,
+            reasoning: $this->reasoning,
+            extraParameters: $this->extraParameters,
         );
     }
 
@@ -390,6 +454,8 @@ final class CompletionOptions implements \JsonSerializable
             logprobs: $this->logprobs,
             topLogprobs: $this->topLogprobs,
             user: $this->user,
+            reasoning: $this->reasoning,
+            extraParameters: $this->extraParameters,
         );
     }
 
@@ -432,6 +498,8 @@ final class CompletionOptions implements \JsonSerializable
             logprobs: $this->logprobs,
             topLogprobs: $this->topLogprobs,
             user: $this->user,
+            reasoning: $this->reasoning,
+            extraParameters: $this->extraParameters,
         );
     }
 
@@ -474,6 +542,8 @@ final class CompletionOptions implements \JsonSerializable
             logprobs: $this->logprobs,
             topLogprobs: $this->topLogprobs,
             user: $this->user,
+            reasoning: $this->reasoning,
+            extraParameters: $this->extraParameters,
         );
     }
 
@@ -516,6 +586,8 @@ final class CompletionOptions implements \JsonSerializable
             logprobs: $this->logprobs,
             topLogprobs: $this->topLogprobs,
             user: $this->user,
+            reasoning: $this->reasoning,
+            extraParameters: $this->extraParameters,
         );
     }
 
@@ -558,6 +630,8 @@ final class CompletionOptions implements \JsonSerializable
             logprobs: $this->logprobs,
             topLogprobs: $this->topLogprobs,
             user: $this->user,
+            reasoning: $this->reasoning,
+            extraParameters: $this->extraParameters,
         );
     }
 
@@ -600,6 +674,173 @@ final class CompletionOptions implements \JsonSerializable
             logprobs: $this->logprobs,
             topLogprobs: $this->topLogprobs,
             user: $this->user,
+            reasoning: $this->reasoning,
+            extraParameters: $this->extraParameters,
+        );
+    }
+
+    /**
+     * Returns a new instance with reasoning configuration updated.
+     *
+     * @param ReasoningConfig|null $reasoning
+     * @return self
+     */
+    public function withReasoning(?ReasoningConfig $reasoning): self
+    {
+        return new self(
+            temperature: $this->temperature,
+            topP: $this->topP,
+            topK: $this->topK,
+            minP: $this->minP,
+            topA: $this->topA,
+            seed: $this->seed,
+            maxTokens: $this->maxTokens,
+            stop: $this->stop,
+            repetitionPenalty: $this->repetitionPenalty,
+            presencePenalty: $this->presencePenalty,
+            frequencyPenalty: $this->frequencyPenalty,
+            tools: $this->tools,
+            toolChoice: $this->toolChoice,
+            parallelToolCalls: $this->parallelToolCalls,
+            provider: $this->provider,
+            route: $this->route,
+            transforms: $this->transforms,
+            plugins: $this->plugins,
+            webSearchOptions: $this->webSearchOptions,
+            xSearchFilter: $this->xSearchFilter,
+            stream: $this->stream,
+            responseFormat: $this->responseFormat,
+            verbosity: $this->verbosity,
+            includeReasoning: $this->includeReasoning,
+            responseHealing: $this->responseHealing,
+            logitBias: $this->logitBias,
+            prediction: $this->prediction,
+            logprobs: $this->logprobs,
+            topLogprobs: $this->topLogprobs,
+            user: $this->user,
+            reasoning: $reasoning,
+            extraParameters: $this->extraParameters,
+        );
+    }
+
+    /**
+     * Returns a new instance configured with reasoning effort level.
+     *
+     * @param ReasoningEffort|string $effort
+     * @param bool|null $exclude
+     * @param ReasoningContext|string|null $context
+     * @param ReasoningMode|string|null $mode
+     * @return self
+     */
+    public function withReasoningEffort(
+        ReasoningEffort|string $effort,
+        ?bool $exclude = null,
+        ReasoningContext|string|null $context = null,
+        ReasoningMode|string|null $mode = null,
+    ): self {
+        return $this->withReasoning(
+            ReasoningConfig::withEffort(
+                effort: $effort,
+                exclude: $exclude,
+                context: $context,
+                mode: $mode
+            )
+        );
+    }
+
+    /**
+     * Returns a new instance configured with token-budget reasoning.
+     *
+     * @param int $maxTokens
+     * @param bool|null $exclude
+     * @param ReasoningContext|string|null $context
+     * @param ReasoningMode|string|null $mode
+     * @return self
+     */
+    public function withReasoningTokens(
+        int $maxTokens,
+        ?bool $exclude = null,
+        ReasoningContext|string|null $context = null,
+        ReasoningMode|string|null $mode = null,
+    ): self {
+        return $this->withReasoning(
+            ReasoningConfig::withMaxTokens(
+                maxTokens: $maxTokens,
+                exclude: $exclude,
+                context: $context,
+                mode: $mode
+            )
+        );
+    }
+
+    /**
+     * Returns a new instance with reasoning configuration removed.
+     *
+     * @return self
+     */
+    public function withoutReasoning(): self
+    {
+        return $this->withReasoning(null);
+    }
+
+    /**
+     * Returns a new instance with a single extra body parameter added.
+     *
+     * @param string $key Parameter name.
+     * @param mixed $value Parameter value.
+     * @return self
+     */
+    public function withExtraParameter(string $key, mixed $value): self
+    {
+        $parameters = $this->extraParameters;
+        $parameters[$key] = $value;
+
+        return $this->withExtraParameters($parameters);
+    }
+
+    /**
+     * Returns a new instance with multiple extra body parameters merged.
+     *
+     * @param array<string, mixed> $parameters Extra arbitrary parameters.
+     * @return self
+     */
+    public function withExtraParameters(array $parameters): self
+    {
+        $merged = array_merge($this->extraParameters, $parameters);
+
+        return new self(
+            temperature: $this->temperature,
+            topP: $this->topP,
+            topK: $this->topK,
+            minP: $this->minP,
+            topA: $this->topA,
+            seed: $this->seed,
+            maxTokens: $this->maxTokens,
+            stop: $this->stop,
+            repetitionPenalty: $this->repetitionPenalty,
+            presencePenalty: $this->presencePenalty,
+            frequencyPenalty: $this->frequencyPenalty,
+            tools: $this->tools,
+            toolChoice: $this->toolChoice,
+            parallelToolCalls: $this->parallelToolCalls,
+            provider: $this->provider,
+            route: $this->route,
+            transforms: $this->transforms,
+            plugins: $this->plugins,
+            webSearchOptions: $this->webSearchOptions,
+            xSearchFilter: $this->xSearchFilter,
+            stream: $this->stream,
+            responseFormat: $this->responseFormat,
+            verbosity: $this->verbosity,
+            includeReasoning: $this->includeReasoning,
+            responseHealing: $this->responseHealing,
+            logitBias: $this->logitBias,
+            prediction: $this->prediction,
+            logprobs: $this->logprobs,
+            topLogprobs: $this->topLogprobs,
+            user: $this->user,
+            reasoning: $this->reasoning,
+            extraParameters: $merged,
         );
     }
 
@@ -610,7 +851,7 @@ final class CompletionOptions implements \JsonSerializable
      */
     public function toArray(): array
     {
-        $data = [];
+        $data = $this->extraParameters;
 
         $fields = [
             'temperature' => $this->temperature,
@@ -635,7 +876,8 @@ final class CompletionOptions implements \JsonSerializable
             'stream' => $this->stream,
             'response_format' => $this->responseFormat?->toArray(),
             'verbosity' => $this->verbosity?->value,
-            'include_reasoning' => $this->includeReasoning,
+            'include_reasoning' => $this->reasoning !== null ? null : ($this->includeReasoning ? true : null),
+            'reasoning' => $this->reasoning?->toArray(),
             'response_healing' => $this->responseHealing,
             'logit_bias' => $this->logitBias,
             'prediction' => $this->prediction,

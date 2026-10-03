@@ -356,7 +356,102 @@ $options = new CompletionOptions(
 > **SpaceXAI Pricing & Top-Level Filter Deprecation:**
 > - **Default behavior**: Web Search requests only perform web search unless `xSearch` is explicitly configured. You are not charged for X Search if it is not enabled.
 > - **Pricing**: X Search is billed at $5 per 1,000 posts fetched and $10 per 1,000 user profiles fetched (filters limit fetched posts, which limits cost).
-> - **Deprecation**: The top-level `withXSearchFilter()` option is deprecated by OpenRouter in favor of configuring `xSearch` inside `OpenRouterWebSearchTool` or web plugins. Existing requests using `withXSearchFilter()` remain supported for backwards compatibility.
+### Reasoning Tokens & Thinking Models
+
+For models that support reasoning/thinking tokens (such as OpenAI o-series, Anthropic Claude thinking, DeepSeek-R1, and Gemini 3), OpenRouter provides a unified interface to control reasoning effort, token budgets, and output visibility.
+
+#### Controlling Reasoning in Requests
+
+Use `ReasoningConfig` directly or fluent builder methods on `CompletionOptions`:
+
+```php
+use MichaelFrank\OpenRouter\Requests\CompletionOptions;
+use MichaelFrank\OpenRouter\Requests\CompletionRequest;
+use MichaelFrank\OpenRouter\Requests\Messages\UserMessage;
+use MichaelFrank\OpenRouter\Requests\Reasoning\ReasoningConfig;
+use MichaelFrank\OpenRouter\Requests\Reasoning\ReasoningContext;
+use MichaelFrank\OpenRouter\Requests\Reasoning\ReasoningEffort;
+use MichaelFrank\OpenRouter\Requests\Reasoning\ReasoningMode;
+
+// Control reasoning effort level (e.g. OpenAI, Grok, Claude, Gemini 3)
+$options = (new CompletionOptions())
+    ->withReasoningEffort(ReasoningEffort::HIGH);
+
+// Control reasoning token budget (e.g. Anthropic, Gemini, Qwen)
+$options = (new CompletionOptions())
+    ->withReasoningTokens(2000);
+
+// Advanced configuration (exclude tokens from response, context mode, pro mode)
+$options = (new CompletionOptions())
+    ->withReasoning(new ReasoningConfig(
+        effort: ReasoningEffort::HIGH,
+        exclude: true, // Compute reasoning internally without including text in response
+        context: ReasoningContext::ALL_TURNS, // Reference reasoning from all conversation turns
+        mode: ReasoningMode::PRO // Route to pro reasoning variant
+    ));
+
+// Remove reasoning configuration
+$options = $options->withoutReasoning();
+```
+
+#### Accessing Reasoning in Responses
+
+In both standard completions and streaming delta chunks, plaintext reasoning and structured reasoning details are available:
+
+```php
+$response = $client->completions($request);
+$message = $response->getFirstChoice()->message;
+
+// Plaintext reasoning string
+echo "Reasoning: " . ($message->reasoning ?? 'None') . "\n";
+echo "Content: " . ($message->content ?? '') . "\n";
+
+// Structured reasoning blocks (summary, encrypted, or text)
+foreach ($message->reasoningDetails as $detail) {
+    echo "Type: {$detail->type}\n";
+    if ($detail->summary !== null) {
+        echo "Summary: {$detail->summary}\n";
+    }
+    if ($detail->text !== null) {
+        echo "Text: {$detail->text}\n";
+    }
+}
+```
+
+#### Preserving Reasoning in Multi-Turn Tool Calling
+
+When working with reasoning models and tool calls, preserving the model's reasoning blocks across turns ensures continuity in the model's chain-of-thought:
+
+```php
+use MichaelFrank\OpenRouter\Requests\Messages\AssistantMessage;
+use MichaelFrank\OpenRouter\Requests\Messages\ToolMessage;
+
+$messages = [
+    new UserMessage("What's the weather in Boston?"),
+    new AssistantMessage(
+        content: $message->content,
+        toolCalls: $message->toolCalls, // Preserves tool call requests
+        reasoning: $message->reasoning, // Preserves plaintext thinking
+        reasoningDetails: $message->reasoningDetails // Preserves encrypted or structured blocks
+    ),
+    new ToolMessage(
+        content: '{"temperature": 45, "condition": "rainy"}',
+        toolCallId: $message->toolCalls[0]->id
+    ),
+];
+```
+
+### Forward-Compatible Arbitrary Body Parameters
+
+OpenRouter frequently releases new provider bypasses, experimental flags, and beta features. To ensure your application is never blocked waiting for an SDK update, you can pass arbitrary top-level body parameters using `$extraParameters`:
+
+```php
+$options = (new CompletionOptions())
+    ->withExtraParameter('provider_bypass', true)
+    ->withExtraParameters([
+        'custom_routing_flag' => 'value',
+    ]);
+```
 
 ### Streaming Response Chunks (Guzzle Example)
 
@@ -680,7 +775,7 @@ foreach ($endpointsResponse->endpoints as $endpoint) {
 
 The Batch API lets you submit many inference requests together and retrieve the results asynchronously with a 24-hour completion window, typically at a 50% pricing discount.
 
-#### 1. Submit a Batch
+#### Submit a Batch
 
 ```php
 use MichaelFrank\OpenRouter\Requests\Batches\BatchCreateRequest;
@@ -717,7 +812,7 @@ echo "Batch ID: " . $batch->id . "\n";
 echo "Status: " . $batch->status->value . "\n"; // validating
 ```
 
-#### 2. Poll for Batch Status & Inline Results
+#### Poll for Batch Status & Inline Results
 
 ```php
 $batch = $client->batch('batch_123');
@@ -741,7 +836,7 @@ if ($batch->status === \MichaelFrank\OpenRouter\Enums\BatchStatus::Completed && 
 }
 ```
 
-#### 3. List Batches in Workspace
+#### List Batches in Workspace
 
 ```php
 use MichaelFrank\OpenRouter\Enums\BatchStatus;
@@ -763,7 +858,7 @@ if ($listResponse->hasMore && $listResponse->lastId !== null) {
 }
 ```
 
-#### 4. Delete a Completed/Terminal Batch
+#### Delete a Completed/Terminal Batch
 
 ```php
 $deletion = $client->deleteBatch('batch_123');

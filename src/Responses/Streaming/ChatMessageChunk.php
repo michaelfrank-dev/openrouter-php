@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MichaelFrank\OpenRouter\Responses\Streaming;
 
 use MichaelFrank\OpenRouter\Enums\MessageRole;
+use MichaelFrank\OpenRouter\Responses\Reasoning\ReasoningDetail;
 use MichaelFrank\OpenRouter\Responses\ToolCall;
 
 /**
@@ -23,12 +24,14 @@ final readonly class ChatMessageChunk
      * @param string|null $content
      * @param string|null $reasoning
      * @param array<ToolCall> $toolCalls
+     * @param array<ReasoningDetail> $reasoningDetails
      */
     public function __construct(
         public ?MessageRole $role,
         public ?string $content,
         public ?string $reasoning,
         public array $toolCalls,
+        public array $reasoningDetails = [],
     ) {
     }
 
@@ -49,6 +52,15 @@ final readonly class ChatMessageChunk
             }
         }
 
+        $reasoningDetails = [];
+        if (isset($data['reasoning_details']) && is_array($data['reasoning_details'])) {
+            foreach ($data['reasoning_details'] as $rd) {
+                if (is_array($rd)) {
+                    $reasoningDetails[] = ReasoningDetail::fromArray($rd);
+                }
+            }
+        }
+
         $role = $data['role'] ?? null;
         $content = $data['content'] ?? null;
         $reasoning = $data['reasoning'] ?? null;
@@ -57,7 +69,8 @@ final readonly class ChatMessageChunk
             role: is_string($role) ? MessageRole::fromString($role) : null,
             content: is_string($content) ? $content : null,
             reasoning: is_string($reasoning) ? $reasoning : null,
-            toolCalls: $toolCalls
+            toolCalls: $toolCalls,
+            reasoningDetails: $reasoningDetails
         );
     }
 
@@ -71,6 +84,7 @@ final readonly class ChatMessageChunk
         return $this->role === null
             && ($this->content === null || $this->content === '')
             && ($this->reasoning === null || $this->reasoning === '')
-            && $this->toolCalls === [];
+            && $this->toolCalls === []
+            && $this->reasoningDetails === [];
     }
 }
