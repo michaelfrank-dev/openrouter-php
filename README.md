@@ -1,9 +1,22 @@
 # OpenRouter PHP SDK
 
-> [!WARNING]
-> This is an *unofficial*, community-maintained PHP SDK for the OpenRouter API. It is not maintained by OpenRouter.
 
 A framework-agnostic, strictly typed PHP SDK for the OpenRouter API. Fully compliant with PSR-12 coding standards, leveraging PSR-18 HTTP Client and PSR-17 HTTP Factory standards for interoperability.
+
+This is an *unofficial*, community-maintained PHP SDK for the OpenRouter API. It is not maintained by OpenRouter.
+
+
+## Features
+
+- Pure PSR-18 / PSR-17 Dependency Injection
+- Static analysis typing (PHPStan level 9, Psalm level 1)
+- Request-side extensible wrappers (no hardcoded enums for API-extensible keys)
+- Immutable option and request configurations
+- Fully supports completions, streaming, embeddings, reranking, speech, transcriptions, image generation, and key checking
+- OpenRouter-native features: routing preferences, fallback models, server tools (Web Search & Fetch)
+- Strict client-side request validation (e.g., verifying mutually exclusive search engine constraints)
+- Built-in Response Metadata & Rate limit tracking
+
 
 > [!NOTE]
 > This SDK does not yet have all OpenRouter endpoints and options implemented. Currently implemented features and endpoints include:
@@ -21,20 +34,6 @@ A framework-agnostic, strictly typed PHP SDK for the OpenRouter API. Fully compl
 > - **Batch Processing:** Submitting asynchronous batch inference requests (`submitBatch`), retrieving progress and inline results (`batch`), listing workspace batches with filters (`batches`), and deleting terminal batches (`deleteBatch`).
 > - **Response Metadata & Rate Limits:** Automatic extraction of request IDs and rate limit headers (`X-RateLimit-*`).
 
----
-
-## Features
-
-- Pure PSR-18 / PSR-17 Dependency Injection
-- Static analysis typing (PHPStan level 9, Psalm level 1)
-- Request-side extensible wrappers (no hardcoded enums for API-extensible keys)
-- Immutable option and request configurations
-- Fully supports completions, streaming, embeddings, reranking, speech, transcriptions, image generation, and key checking
-- OpenRouter-native features: routing preferences, fallback models, server tools (Web Search & Fetch)
-- Strict client-side request validation (e.g., verifying mutually exclusive search engine constraints)
-- Built-in Response Metadata & Rate limit tracking
-
----
 
 ## Installation
 

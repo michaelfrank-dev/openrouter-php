@@ -6,9 +6,14 @@ on:
   pull_request:
     branches: [ main, master ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     strategy:
       fail-fast: false
@@ -25,15 +30,49 @@ jobs:
         php-version: ${{ matrix.php }}
         extensions: json, mbstring
         coverage: pcov
+        tools: composer:v2
 
-    - name: Validate composer.json
+    - name: Validate composer.json and composer.lock
       run: composer validate --strict
 
+    - name: Get Composer cache directory
+      id: composer-cache
+      run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+    - name: Cache Composer dependencies
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.composer-cache.outputs.dir }}
+        key: ${{ runner.os }}-composer-${{ matrix.php }}-${{ hashFiles('**/composer.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-composer-${{ matrix.php }}-
+          ${{ runner.os }}-composer-
+
     - name: Install dependencies
-      run: composer install --prefer-dist --no-progress
+      env:
+        COMPOSER_PROCESS_TIMEOUT: 600
+      run: composer install --prefer-dist --no-progress --no-interaction
 
     - name: Check for security vulnerabilities
-      run: composer audit
+      run: |
+        for i in 1 2 3; do
+          echo "Running composer audit (attempt $i)..."
+          if composer audit; then
+            exit 0
+          fi
+          echo "composer audit failed; retrying in 5 seconds..."
+          sleep 5
+        done
+        exit 1
 
-    - name: Run checks
-      run: composer run check
+    - name: Code style (phpcs)
+      run: composer run cs
+
+    - name: Static analysis (phpstan)
+      run: composer run stan
+
+    - name: Static analysis (psalm)
+      run: composer run psalm
+
+    - name: Unit tests (phpunit)
+      run: composer run test
